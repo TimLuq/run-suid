@@ -9,8 +9,19 @@ labels = ["run-suid"]
 license = "LGPL-2.1-or-later"
 name = "run-suid"
 repository = "https://github.com/TimLuq/run-suid/"
+rust-version = "1.61"
 version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+parking_lot = "^0.12.1"
+smallvec = { version = "^1.8.0", features = ["const_new", "const_generics", "union"] }
+
+
+[target."cfg(unix)".dependencies]
+libc = "^0.2.126"
+
+
+[target."cfg(windows)".dependencies]
+winapi = "^0.3.9"

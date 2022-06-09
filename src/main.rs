@@ -1,31 +1,27 @@
-use std::{process::{Command, Stdio}, collections::VecDeque, ffi::OsStr, io::ErrorKind};
+use std::{process::{Command, Stdio, ExitCode}, collections::VecDeque, ffi::OsStr, io::ErrorKind};
 
 mod env;
 use env::EnvTrait;
 
 #[cfg(unix)]
 mod nix;
-
-#[cfg(unix)]
-use nix::*;
-
 #[cfg(unix)]
 type Env = nix::Nix;
 
 #[cfg(not(unix))]
 compile_error!("Unsupported platform");
 
-const RET_GENERIC_ERROR: i32 = 32 | 1;
-const RET_ENV_ERROR: i32 = 32 | 2;
-const RET_NO_TARGET: i32 = 32 | 3;
-const RET_OWNER_EXEC: i32 = 32 | 8 | 0;
-const RET_PERM_EXEC: i32 = 32 | 8 | 1;
-const RET_OWNER_PARENT: i32 = 32 | 8 | 2;
-const RET_PERM_PARENT: i32 = 32 | 8 | 3;
-const RET_OWNER_TARGET: i32 = 32 | 6;
-const RET_PERM_TARGET: i32 = 32 | 6;
+const RET_GENERIC_ERROR: u8 = 32 | 1;
+const RET_ENV_ERROR: u8 = 32 | 2;
+const RET_NO_TARGET: u8 = 32 | 3;
+const RET_OWNER_EXEC: u8 = 32 | 8 | 0;
+const RET_PERM_EXEC: u8 = 32 | 8 | 1;
+const RET_OWNER_PARENT: u8 = 32 | 8 | 2;
+const RET_PERM_PARENT: u8 = 32 | 8 | 3;
+const RET_OWNER_TARGET: u8 = 32 | 6;
+const RET_PERM_TARGET: u8 = 32 | 6;
 
-fn main() {
+fn main() -> ExitCode {
     let mut args = std::env::args().collect::<VecDeque<_>>();
     let fname = args.pop_front().unwrap_or_default();
     let mut args_l = Vec::with_capacity(args.len());
@@ -50,7 +46,7 @@ fn main() {
         println!("  EXE_ARGS:");
         println!("    if specified, each argument will be passed to the executed subprocess.");
         if !args_l.contains(&"--help") {
-            std::process::exit(0);
+            return ExitCode::SUCCESS;
         }
         println!("");
         println!(concat!(env!("CARGO_PKG_DESCRIPTION")));
@@ -63,14 +59,14 @@ fn main() {
         println!(concat!("Homepage: ", env!("CARGO_PKG_HOMEPAGE")));
         println!(concat!("License:  ", env!("CARGO_PKG_LICENSE")));
 
-        std::process::exit(0);
+        return ExitCode::SUCCESS;
     }
 
     let cwd = match std::env::current_dir().and_then(|f| std::fs::canonicalize(f)) {
         Ok(f) => f,
         Err(e) => {
             eprintln!("Unable to get the current directory: {}", e);
-            std::process::exit(RET_GENERIC_ERROR);
+            return RET_GENERIC_ERROR.into();
         }
     };
 
@@ -78,68 +74,68 @@ fn main() {
         Ok(path) => path,
         Err(err) => {
             eprintln!("Unable to find the name of the executable: {}", err);
-            std::process::exit(RET_ENV_ERROR);
+            return RET_ENV_ERROR.into();
         }
     };
     let exe_uid = match Env::file_owner(&exe) {
         Ok((exe_uid, meta, true)) if meta.is_file() => exe_uid,
         Ok((_, _, true)) => {
             eprintln!("The executable must be a ... file: {:?}", exe);
-            std::process::exit(RET_ENV_ERROR);
+            return RET_ENV_ERROR.into();
         }
         Ok((_, _, false)) => {
             eprintln!("The executable permissions must include the SUID bit as well as be writable by only the owning user: {:?}", exe);
-            std::process::exit(RET_PERM_EXEC);
+            return RET_PERM_EXEC.into();
         }
         Err(err) => {
             eprintln!("Unable to find the owner of the executable: {}", err);
-            std::process::exit(RET_ENV_ERROR);
+            return RET_ENV_ERROR.into();
         }
     };
     let exe_name = match exe.file_name().map(OsStr::to_str) {
         Some(Some(fname)) => fname,
         Some(None) => {
             eprintln!("Unable to read the name of the executable: {:?}", exe);
-            std::process::exit(RET_ENV_ERROR);
+            return RET_ENV_ERROR.into();
         }
         None => {
             eprintln!("Unable to find the name of the executable: {:?}", exe);
-            std::process::exit(RET_ENV_ERROR);
+            return RET_ENV_ERROR.into();
         }
     };
 
-    let euid = unsafe { geteuid() };
+    let euid = unsafe { Env::geteuid() };
 
     if euid != exe_uid {
         eprintln!("You are not the owner of this executable.");
-        std::process::exit(RET_OWNER_EXEC);
+        return RET_OWNER_EXEC.into();
     }
 
     let parent = match exe.parent() {
         Some(a) => a,
         None => {
             eprintln!("Unable to find the parent directory of the executable: {}", exe.display());
-            std::process::exit(RET_ENV_ERROR);
+            return RET_ENV_ERROR.into();
         }
     };
     let par_uid = match Env::file_owner(parent) {
         Ok((exe_uid, m, true)) if m.is_dir() => exe_uid,
         Ok((_, _, true)) => {
             eprintln!("The parent directory must be a ... directory: {:?}", parent);
-            std::process::exit(RET_ENV_ERROR);
+            return RET_ENV_ERROR.into();
         }
         Ok((_, _, false)) => {
             eprintln!("The parent directory permissions must be writable by only the owning user: {:?}", parent);
-            std::process::exit(RET_PERM_PARENT);
+            return RET_PERM_PARENT.into();
         }
         Err(err) => {
             eprintln!("Unable to find the owner of the parent directory: {}", err);
-            std::process::exit(RET_ENV_ERROR);
+            return RET_ENV_ERROR.into();
         }
     };
     if euid != par_uid {
         eprintln!("The the owner of the parent directory is not the same as the executable.");
-        std::process::exit(RET_OWNER_PARENT);
+        return RET_OWNER_PARENT.into();
     }
 
     let target = Env::sibling_target(parent, exe_name);
@@ -147,24 +143,24 @@ fn main() {
         Ok((exe_uid, m, true)) if m.is_file() => exe_uid,
         Ok((_, _, true)) => {
             eprintln!("The target executable must be a file: {:?}", target);
-            std::process::exit(RET_ENV_ERROR);
+            return RET_ENV_ERROR.into();
         }
         Ok((_, _, false)) => {
             eprintln!("The target executable permissions must include the SUID bit as well as be writable by only the owning user: {:?}", target);
-            std::process::exit(RET_PERM_TARGET);
+            return RET_PERM_TARGET.into();
         }
         Err(err) if err.kind() == ErrorKind::NotFound => {
             eprintln!("Unable to find the owner of the target executable {:?}: {}", target, err);
-            std::process::exit(RET_NO_TARGET);
+            return RET_NO_TARGET.into();
         }
         Err(err) => {
             eprintln!("Unable to find the owner of the target executable {:?}: {}", target, err);
-            std::process::exit(RET_ENV_ERROR);
+            return RET_ENV_ERROR.into();
         }
     };
     if euid != tar_uid {
         eprintln!("The the owner of the target executable is not the same as the executable.");
-        std::process::exit(RET_OWNER_TARGET);
+        return RET_OWNER_TARGET.into();
     }
 
     let mut command = Command::new(target);
@@ -175,6 +171,5 @@ fn main() {
         .env_clear();
     Env::prepare_command(&mut command, args, exe_uid, gid);
 
-    let r = Env::wait_for(command);
-    std::process::exit(r);
+    Env::wait_for(command)
 }

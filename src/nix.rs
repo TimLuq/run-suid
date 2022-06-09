@@ -1,4 +1,6 @@
-use std::{path::{Path, PathBuf}, os::unix::prelude::{MetadataExt, PermissionsExt}, fs::Metadata, process::Command, collections::BTreeSet};
+use std::{path::{Path, PathBuf}, os::unix::{prelude::{MetadataExt, PermissionsExt}}, fs::Metadata, process::{Command, ExitCode}, collections::BTreeSet};
+
+use parking_lot::Mutex;
 
 use crate::{env::EnvTrait, RET_GENERIC_ERROR};
 
@@ -7,15 +9,15 @@ pub(crate) struct Nix {}
 impl EnvTrait for Nix {
     #[inline]
     unsafe fn geteuid() -> u32 {
-        geteuid()
+        libc::geteuid()
     }
     #[inline]
     unsafe fn getuid() -> u32 {
-        getuid()
+        libc::getuid()
     }
     #[inline]
     unsafe fn getegid() -> u32 {
-        getegid()
+        libc::getegid()
     }
     #[inline]
     fn file_owner(path: &Path) -> Result<(u32, Metadata, bool), std::io::Error> {
@@ -30,16 +32,9 @@ impl EnvTrait for Nix {
         prepare_command(command, args, uid, gid)
     }
     #[inline]
-    fn wait_for(child: Command) -> i32 {
+    fn wait_for(child: Command) -> ExitCode {
         wait_for(child)
     }
-}
-
-#[link(name = "c")]
-extern "C" {
-    pub(crate) fn geteuid() -> u32;
-    pub(crate) fn getuid() -> u32;
-    pub(crate) fn getegid() -> u32;
 }
 
 const PERM_FILE_MASK: u32 = 0o4522;
@@ -108,8 +103,115 @@ fn prepare_command<'a, A: IntoIterator<Item = &'a str>>(command: &mut Command, a
     command.env("PATH", path);
 }
 
-fn wait_for(mut child: Command) -> i32 {
-    let e = std::os::unix::process::CommandExt::exec(&mut child);
-    eprintln!("Unable to execute command: {}", e);
-    RET_GENERIC_ERROR
+static COND: parking_lot::Condvar = parking_lot::Condvar::new();
+static EXIT: parking_lot::Mutex<Option<ExitCode>> = parking_lot::Mutex::new(None);
+static CAPTURED_SIGS_CONST: [i32; 20] = {
+    use libc::*;
+
+    [
+        SIGABRT,
+        SIGALRM,
+        // SIGCHLD,
+        SIGCONT,
+        SIGFPE,
+        SIGHUP,
+        SIGILL,
+        SIGINT,
+        // SIGKILL,
+        SIGPIPE,
+        SIGPOLL,
+        // SIGRTMIN..=SIGRTMAX,
+        SIGQUIT,
+        // SIGSEGV,
+        SIGSTOP,
+        SIGSYS,
+        SIGTSTP,
+        SIGTTIN,
+        SIGTTOU,
+        // SIGTRAP,
+        SIGURG,
+        SIGUSR1,
+        SIGUSR2,
+        SIGXCPU,
+        SIGXFSZ,
+    ]
+};
+
+static WAIT_FOR_PID: Mutex<(i32, i32)> = Mutex::new((0, 0));
+
+fn signal_trap(signal: i32) {
+    let mut exit = WAIT_FOR_PID.lock();
+    let (next_sig, pid) = &mut *exit;
+    if *pid == 0 {
+        *next_sig = signal;
+    } else {
+        unsafe { libc::kill(*pid, signal) };
+    }
+    std::mem::drop(exit);
+}
+
+fn wait_for(mut child: Command) -> ExitCode {
+
+    std::thread::Builder::new()
+        .name("wait-for-child".to_string())
+        .stack_size(std::mem::size_of::<usize>() * 16)
+        .spawn(move || {
+            
+            let mut child = match child.spawn() {
+                Ok(child) => child,
+                Err(e) => {
+                    eprintln!("Unable to execute command: {}", e);
+                    let mut exit = EXIT.lock();
+                    *exit = Some(ExitCode::from(RET_GENERIC_ERROR));
+                    COND.notify_all();
+                    return;
+                },
+            };
+            {
+                let mut exit = WAIT_FOR_PID.lock();
+                let (next_sig, pid) = &mut *exit;
+                *pid = child.id() as i32;
+                if *next_sig != 0 {
+                    unsafe { libc::kill(*pid, *next_sig) };
+                    *next_sig = 0;
+                }
+                std::mem::drop(exit)
+            }
+            match child.wait() {
+                Ok(r) => {
+                    let mut exit = EXIT.lock();
+                    *exit = Some(ExitCode::from(r.code().unwrap_or(255) as u8));
+                    COND.notify_all();
+                }
+                Err(e) => {
+                    eprintln!("Unable to wait for child: {}", e);
+                    let mut exit = EXIT.lock();
+                    *exit = Some(ExitCode::from(RET_GENERIC_ERROR as u8));
+                    COND.notify_all();
+                }
+            }
+        }).unwrap();
+    
+    {
+        let mut exit = EXIT.lock();
+        if let Some(r) = exit.take() {
+            return r;
+        } else {
+            unsafe {
+                use libc::*;
+                let range = (SIGRTMIN()..=SIGRTMAX()).collect::<Vec<_>>();
+                for signum in CAPTURED_SIGS_CONST.iter().chain(range.iter()) {
+                    if signal(*signum, signal_trap as usize) == SIG_IGN {
+                        signal(*signum, SIG_IGN);
+                    }
+                }
+            }
+            loop {
+                COND.wait(&mut exit);
+                if let Some(r) = exit.take() {
+                    return r;
+                }
+            }
+        }
+    }
 }
