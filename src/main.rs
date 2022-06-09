@@ -2,6 +2,7 @@ use std::{process::{Command, Stdio, ExitCode}, collections::VecDeque, ffi::OsStr
 
 mod env;
 use env::EnvTrait;
+use smallvec::SmallVec;
 
 #[cfg(unix)]
 mod nix;
@@ -32,8 +33,8 @@ fn main() -> ExitCode {
         }
         break;
     }
-    let args_l = args_l.iter().map(String::as_str).collect::<Vec<_>>();
-    let args = args.iter().map(String::as_str).collect::<Vec<_>>();
+    let args_l = args_l.iter().map(String::as_str).collect::<SmallVec<[_; 8]>>();
+    let args = args.iter().map(String::as_str).collect::<SmallVec<[_; 8]>>();
     let gid = unsafe { Env::getegid() };
     
     if args_l.contains(&"--help") || args_l.contains(&"-h") {

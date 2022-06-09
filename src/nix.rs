@@ -199,8 +199,8 @@ fn wait_for(mut child: Command) -> ExitCode {
         } else {
             unsafe {
                 use libc::*;
-                let range = (SIGRTMIN()..=SIGRTMAX()).collect::<Vec<_>>();
-                for signum in CAPTURED_SIGS_CONST.iter().chain(range.iter()) {
+                // let range = (SIGRTMIN()..=SIGRTMAX()).collect::<SmallVec<[_; 32]>>();
+                for signum in CAPTURED_SIGS_CONST.iter() {
                     if signal(*signum, signal_trap as usize) == SIG_IGN {
                         signal(*signum, SIG_IGN);
                     }
