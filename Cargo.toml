@@ -1,0 +1,16 @@
+[package]
+authors = ["TimLuq"]
+categories = ["command-line-utilities"]
+description = "Runs an executable (including scripts) as the owner of the file. The application can be renamed or hard linked to any file name where the target executable exists. The application, target executable, and their parent directory must be owned by the same user with no one else having write permissions. To make this work the application should have the SUID bit set."
+edition = "2021"
+homepage = "https://github.com/TimLuq/run-suid/"
+keywords = ["suid", "setuid", "wrapper", "cli"]
+labels = ["run-suid"]
+license = "LGPL-2.1-or-later"
+name = "run-suid"
+repository = "https://github.com/TimLuq/run-suid/"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
