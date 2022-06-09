@@ -65,10 +65,12 @@ fn sibling_target(parent: &Path, file_name: &str) -> PathBuf {
     let mut r = PathBuf::from(parent);
     if let Some(a) = file_name.split('.').last() {
         let pos = file_name.len() - a.len();
-        r.push(format!("{}.run-suid.{}", &file_name[..(pos - 1)], &file_name[..pos]));
-    } else {
-        r.push(format!("{}.run-suid", file_name));
+        if pos != 0 {
+            r.push(format!("{}.run-suid.{}", &file_name[..(pos - 1)], &file_name[pos..]));
+            return r;
+        }
     }
+    r.push(format!("{}.run-suid", file_name));
     r
 }
 
