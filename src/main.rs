@@ -70,7 +70,7 @@ fn main() -> ExitCode {
     }
 
     for arg in args_l.iter() {
-        if ["-v", "--verbose", "--dry-run"].contains(arg) {
+        if !["-v", "--verbose", "--dry-run"].contains(arg) {
             eprintln!("Unexpected argument: {:?}", arg);
             return RET_GENERIC_ERROR.into();
         }
