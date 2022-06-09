@@ -25,6 +25,8 @@ const RET_PERM_TARGET: u8 = 32 | 6;
 struct Opts {
     verbose: bool,
     dry_run: bool,
+    uid: u32,
+    gid: u32,
 }
 
 fn main() -> ExitCode {
@@ -75,11 +77,6 @@ fn main() -> ExitCode {
             return RET_GENERIC_ERROR.into();
         }
     }
-
-    let opts = Opts {
-        verbose: args_l.contains(&"--verbose") || args_l.contains(&"-v"),
-        dry_run: args_l.contains(&"--dry-run"),
-    };
 
     let cwd = match std::env::current_dir().and_then(|f| std::fs::canonicalize(f)) {
         Ok(f) => f,
@@ -181,6 +178,13 @@ fn main() -> ExitCode {
         eprintln!("The the owner of the target executable is not the same as the executable.");
         return RET_OWNER_TARGET.into();
     }
+    
+    let opts = Opts {
+        verbose: args_l.contains(&"--verbose") || args_l.contains(&"-v"),
+        dry_run: args_l.contains(&"--dry-run"),
+        uid: euid,
+        gid,
+    };
 
     if opts.dry_run {
         use std::fmt::Write;
@@ -200,7 +204,7 @@ fn main() -> ExitCode {
         .stderr(Stdio::inherit())
         .stdout(Stdio::inherit())
         .env_clear();
-    Env::prepare_command(&mut command, args, exe_uid, gid);
+    Env::prepare_command(&mut command, args, &opts);
 
     Env::wait_for(command, opts)
 }

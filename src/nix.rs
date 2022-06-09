@@ -1,4 +1,4 @@
-use std::{path::{Path, PathBuf}, os::unix::{prelude::{MetadataExt, PermissionsExt}}, fs::Metadata, process::{Command, ExitCode}, collections::BTreeSet};
+use std::{path::{Path, PathBuf}, os::unix::{prelude::{MetadataExt, PermissionsExt, CommandExt}}, fs::Metadata, process::{Command, ExitCode}, collections::BTreeSet};
 
 use parking_lot::Mutex;
 
@@ -28,8 +28,8 @@ impl EnvTrait for Nix {
         sibling_target(parent, file_name)
     }
     #[inline]
-    fn prepare_command<'a, A: IntoIterator<Item = &'a str>>(command: &mut Command, args: A, uid: u32, gid: u32) {
-        prepare_command(command, args, uid, gid)
+    fn prepare_command<'a, A: IntoIterator<Item = &'a str>>(command: &mut Command, args: A, opts: &super::Opts) {
+        prepare_command(command, args, &opts)
     }
     #[inline]
     fn wait_for(child: Command, opts: super::Opts) -> ExitCode {
@@ -78,7 +78,7 @@ static PATHS: &[&str] = &[
     "/bin",
 ];
 
-fn prepare_command<'a, A: IntoIterator<Item = &'a str>>(command: &mut Command, args: A, uid: u32, gid: u32) {
+fn prepare_command<'a, A: IntoIterator<Item = &'a str>>(command: &mut Command, args: A, opts: &super::Opts) {
     command.args(args);
     command.env_clear();
     let cur_path: BTreeSet<_> = match std::env::var("PATH") {
@@ -98,8 +98,8 @@ fn prepare_command<'a, A: IntoIterator<Item = &'a str>>(command: &mut Command, a
     } else {
         path.push_str("/bin");
     }
-    std::os::unix::process::CommandExt::uid(command, uid);
-    std::os::unix::process::CommandExt::gid(command, gid);
+    CommandExt::uid(command, opts.uid);
+    CommandExt::gid(command, opts.gid);
     command.env("PATH", path);
 }
 
@@ -165,8 +165,20 @@ fn wait_for(mut child: Command, opts: super::Opts) -> ExitCode {
         .name("wait-for-child".to_string())
         .stack_size(std::mem::size_of::<usize>() * 16)
         .spawn(move || {
+            let v = opts.verbose;
             if v {
-                eprintln!("Verbose: queuing signal {:?}", child);
+                use std::fmt::Write;
+                let mut out = String::new();
+                write!(out, "{:?}", child.get_program()).unwrap();
+                for a in child.get_args() {
+                    write!(out, " {:?}", a).unwrap();
+                }
+                write!(out, " {{ uid: {}, gid: {}, args: {{", opts.uid, opts.gid).unwrap();
+                for a in child.get_envs() {
+                    write!(out, " {:?}: {:?},", a.0, a.1).unwrap();
+                }
+                write!(out, "}} }}").unwrap();
+                eprintln!("{}", out);
             }
             let mut child = match child.spawn() {
                 Ok(child) => child,

@@ -13,7 +13,7 @@ pub(crate) trait EnvTrait {
     /// Compute the location for the target executable.
     fn sibling_target(parent: &Path, file_name: &str) -> PathBuf;
 
-    fn prepare_command<'a, A: IntoIterator<Item = &'a str>>(command: &mut Command, args: A, uid: u32, gid: u32);
+    fn prepare_command<'a, A: IntoIterator<Item = &'a str>>(command: &mut Command, args: A, opts: &super::Opts);
     fn wait_for(child: Command, opts: super::Opts) -> ExitCode;
 }
 
