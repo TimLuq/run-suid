@@ -32,8 +32,8 @@ impl EnvTrait for Nix {
         prepare_command(command, args, uid, gid)
     }
     #[inline]
-    fn wait_for(child: Command) -> ExitCode {
-        wait_for(child)
+    fn wait_for(child: Command, opts: super::Opts) -> ExitCode {
+        wait_for(child, opts)
     }
 }
 
@@ -138,25 +138,36 @@ static CAPTURED_SIGS_CONST: [i32; 20] = {
 };
 
 static WAIT_FOR_PID: Mutex<(i32, i32)> = Mutex::new((0, 0));
+static mut VERBOSE: bool = false;
 
 fn signal_trap(signal: i32) {
     let mut exit = WAIT_FOR_PID.lock();
+    let v = unsafe { std::ptr::read_volatile(&VERBOSE) };
     let (next_sig, pid) = &mut *exit;
     if *pid == 0 {
+        if v {
+            eprintln!("Verbose: queuing signal {}", signal);
+        }
         *next_sig = signal;
     } else {
+        if v {
+            eprintln!("Verbose: sending signal {}", signal);
+        }
         unsafe { libc::kill(*pid, signal) };
     }
     std::mem::drop(exit);
 }
 
-fn wait_for(mut child: Command) -> ExitCode {
-
+fn wait_for(mut child: Command, opts: super::Opts) -> ExitCode {
+    let v = opts.verbose;
+    unsafe { std::ptr::write_volatile(&mut VERBOSE, v) };
     std::thread::Builder::new()
         .name("wait-for-child".to_string())
         .stack_size(std::mem::size_of::<usize>() * 16)
         .spawn(move || {
-            
+            if v {
+                eprintln!("Verbose: queuing signal {:?}", child);
+            }
             let mut child = match child.spawn() {
                 Ok(child) => child,
                 Err(e) => {
@@ -167,18 +178,28 @@ fn wait_for(mut child: Command) -> ExitCode {
                     return;
                 },
             };
+            let cpid = child.id() as i32;
             {
                 let mut exit = WAIT_FOR_PID.lock();
                 let (next_sig, pid) = &mut *exit;
-                *pid = child.id() as i32;
+                *pid = cpid;
                 if *next_sig != 0 {
+                    if v {
+                        eprintln!("Verbose: sending queued signal {:?}", child);
+                    }
                     unsafe { libc::kill(*pid, *next_sig) };
                     *next_sig = 0;
                 }
                 std::mem::drop(exit)
             }
+            if v {
+                eprintln!("Verbose: waiting for child {:?}", cpid);
+            }
             match child.wait() {
                 Ok(r) => {
+                    if v {
+                        eprintln!("Verbose: child process exited {:?}", r);
+                    }
                     let mut exit = EXIT.lock();
                     *exit = Some(ExitCode::from(r.code().unwrap_or(255) as u8));
                     COND.notify_all();
@@ -197,6 +218,9 @@ fn wait_for(mut child: Command) -> ExitCode {
         if let Some(r) = exit.take() {
             return r;
         } else {
+            if v {
+                eprintln!("Verbose: registering signal handlers");
+            }
             unsafe {
                 use libc::*;
                 // let range = (SIGRTMIN()..=SIGRTMAX()).collect::<SmallVec<[_; 32]>>();
@@ -207,6 +231,9 @@ fn wait_for(mut child: Command) -> ExitCode {
                 }
             }
             loop {
+                if v {
+                    eprintln!("Verbose: waiting for child completion");
+                }
                 COND.wait(&mut exit);
                 if let Some(r) = exit.take() {
                     return r;

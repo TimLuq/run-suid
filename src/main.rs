@@ -22,6 +22,11 @@ const RET_PERM_PARENT: u8 = 32 | 8 | 3;
 const RET_OWNER_TARGET: u8 = 32 | 6;
 const RET_PERM_TARGET: u8 = 32 | 6;
 
+struct Opts {
+    verbose: bool,
+    dry_run: bool,
+}
+
 fn main() -> ExitCode {
     let mut args = std::env::args().collect::<VecDeque<_>>();
     let fname = args.pop_front().unwrap_or_default();
@@ -41,7 +46,8 @@ fn main() -> ExitCode {
         println!("Usage: {} [OPTIONS] [-- EXE_ARGS..]", fname);
         println!("  OPTIONS: ");
         println!("    -h    --help          Display this help text.");
-        println!("    -v    --version       Display version information.");
+        println!("    -v    --verbose       Display verbose runtime information.");
+        println!("          --version       Display version information.");
         println!("          --dry-run       Don't actually run the target executable,");
         println!("                          only check that it would have run.");
         println!("  EXE_ARGS:");
@@ -54,7 +60,7 @@ fn main() -> ExitCode {
         println!("");
     }
     
-    if args_l.contains(&"--help") || args_l.contains(&"--version") || args_l.contains(&"-v") {
+    if args_l.contains(&"--help") || args_l.contains(&"--version") {
         println!(concat!(env!("CARGO_PKG_NAME"), " ", env!("CARGO_PKG_VERSION")));
         println!(concat!("Author:   ", env!("CARGO_PKG_AUTHORS")));
         println!(concat!("Homepage: ", env!("CARGO_PKG_HOMEPAGE")));
@@ -62,6 +68,18 @@ fn main() -> ExitCode {
 
         return ExitCode::SUCCESS;
     }
+
+    for arg in args_l.iter() {
+        if ["-v", "--verbose", "--dry-run"].contains(arg) {
+            eprintln!("Unexpected argument: {:?}", arg);
+            return RET_GENERIC_ERROR.into();
+        }
+    }
+
+    let opts = Opts {
+        verbose: args_l.contains(&"--verbose") || args_l.contains(&"-v"),
+        dry_run: args_l.contains(&"--dry-run"),
+    };
 
     let cwd = match std::env::current_dir().and_then(|f| std::fs::canonicalize(f)) {
         Ok(f) => f,
@@ -164,6 +182,18 @@ fn main() -> ExitCode {
         return RET_OWNER_TARGET.into();
     }
 
+    if opts.dry_run {
+        use std::fmt::Write;
+        let mut out = String::new();
+        out.push_str("Dry run: would have succeeded in starting the process: ");
+        write!(out, "{:?}", target).unwrap();
+        for a in args {
+            write!(out, " {:?}", a).unwrap();
+        }
+        println!("{}", out);
+        return ExitCode::SUCCESS;
+    }
+
     let mut command = Command::new(target);
     command.current_dir(cwd)
         .stdin(Stdio::inherit())
@@ -172,5 +202,5 @@ fn main() -> ExitCode {
         .env_clear();
     Env::prepare_command(&mut command, args, exe_uid, gid);
 
-    Env::wait_for(command)
+    Env::wait_for(command, opts)
 }

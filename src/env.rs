@@ -14,7 +14,7 @@ pub(crate) trait EnvTrait {
     fn sibling_target(parent: &Path, file_name: &str) -> PathBuf;
 
     fn prepare_command<'a, A: IntoIterator<Item = &'a str>>(command: &mut Command, args: A, uid: u32, gid: u32);
-    fn wait_for(child: Command) -> ExitCode;
+    fn wait_for(child: Command, opts: super::Opts) -> ExitCode;
 }
 
 
