@@ -174,7 +174,7 @@ fn main() -> ExitCode {
             return RET_ENV_ERROR.into();
         }
     };
-    if euid != tar_uid {
+    if euid != 0 && euid != tar_uid {
         eprintln!("The the owner of the target executable is not the same as the executable.");
         return RET_OWNER_TARGET.into();
     }
@@ -182,7 +182,7 @@ fn main() -> ExitCode {
     let opts = Opts {
         verbose: args_l.contains(&"--verbose") || args_l.contains(&"-v"),
         dry_run: args_l.contains(&"--dry-run"),
-        uid: euid,
+        uid: tar_uid,
         gid,
     };
 

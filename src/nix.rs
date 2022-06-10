@@ -98,8 +98,10 @@ fn prepare_command<'a, A: IntoIterator<Item = &'a str>>(command: &mut Command, a
     } else {
         path.push_str("/bin");
     }
-    // CommandExt::uid(command, opts.uid);
-    // CommandExt::gid(command, opts.gid);
+    if opts.uid != 0 && unsafe { libc::geteuid() } == 0 {
+        CommandExt::uid(command, opts.uid);
+        CommandExt::gid(command, opts.gid);
+    }
     command.env("PATH", path);
 }
 
