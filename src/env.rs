@@ -1,5 +1,8 @@
-use std::{path::{Path, PathBuf}, fs::Metadata, process::{Command, ExitCode}};
-
+use std::{
+    fs::Metadata,
+    path::{Path, PathBuf},
+    process::{Command, ExitCode},
+};
 
 pub(crate) trait EnvTrait {
     /// Gets the effective user id, might be different from the real user id if the SUID bit is set.
@@ -13,8 +16,10 @@ pub(crate) trait EnvTrait {
     /// Compute the location for the target executable.
     fn sibling_target(parent: &Path, file_name: &str) -> PathBuf;
 
-    fn prepare_command<'a, A: IntoIterator<Item = &'a str>>(command: &mut Command, args: A, opts: &super::Opts);
+    fn prepare_command<'a, A: IntoIterator<Item = &'a str>>(
+        command: &mut Command,
+        args: A,
+        opts: &super::Opts,
+    );
     fn wait_for(child: Command, opts: super::Opts) -> ExitCode;
 }
-
-

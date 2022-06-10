@@ -1,4 +1,9 @@
-use std::{process::{Command, Stdio, ExitCode}, collections::VecDeque, ffi::OsStr, io::ErrorKind};
+use std::{
+    collections::VecDeque,
+    ffi::OsStr,
+    io::ErrorKind,
+    process::{Command, ExitCode, Stdio},
+};
 
 mod env;
 use env::EnvTrait;
@@ -40,10 +45,16 @@ fn main() -> ExitCode {
         }
         break;
     }
-    let args_l = args_l.iter().map(String::as_str).collect::<SmallVec<[_; 8]>>();
-    let args = args.iter().map(String::as_str).collect::<SmallVec<[_; 8]>>();
+    let args_l = args_l
+        .iter()
+        .map(String::as_str)
+        .collect::<SmallVec<[_; 8]>>();
+    let args = args
+        .iter()
+        .map(String::as_str)
+        .collect::<SmallVec<[_; 8]>>();
     let gid = unsafe { Env::getegid() };
-    
+
     if args_l.contains(&"--help") || args_l.contains(&"-h") {
         println!("Usage: {} [OPTIONS] [-- EXE_ARGS..]", fname);
         println!("  OPTIONS: ");
@@ -61,9 +72,13 @@ fn main() -> ExitCode {
         println!(concat!(env!("CARGO_PKG_DESCRIPTION")));
         println!("");
     }
-    
+
     if args_l.contains(&"--help") || args_l.contains(&"--version") {
-        println!(concat!(env!("CARGO_PKG_NAME"), " ", env!("CARGO_PKG_VERSION")));
+        println!(concat!(
+            env!("CARGO_PKG_NAME"),
+            " ",
+            env!("CARGO_PKG_VERSION")
+        ));
         println!(concat!("Author:   ", env!("CARGO_PKG_AUTHORS")));
         println!(concat!("Homepage: ", env!("CARGO_PKG_HOMEPAGE")));
         println!(concat!("License:  ", env!("CARGO_PKG_LICENSE")));
@@ -130,7 +145,10 @@ fn main() -> ExitCode {
     let parent = match exe.parent() {
         Some(a) => a,
         None => {
-            eprintln!("Unable to find the parent directory of the executable: {}", exe.display());
+            eprintln!(
+                "Unable to find the parent directory of the executable: {}",
+                exe.display()
+            );
             return RET_ENV_ERROR.into();
         }
     };
@@ -141,7 +159,10 @@ fn main() -> ExitCode {
             return RET_ENV_ERROR.into();
         }
         Ok((_, _, false)) => {
-            eprintln!("The parent directory permissions must be writable by only the owning user: {:?}", parent);
+            eprintln!(
+                "The parent directory permissions must be writable by only the owning user: {:?}",
+                parent
+            );
             return RET_PERM_PARENT.into();
         }
         Err(err) => {
@@ -166,11 +187,17 @@ fn main() -> ExitCode {
             return RET_PERM_TARGET.into();
         }
         Err(err) if err.kind() == ErrorKind::NotFound => {
-            eprintln!("Unable to find the owner of the target executable {:?}: {}", target, err);
+            eprintln!(
+                "Unable to find the owner of the target executable {:?}: {}",
+                target, err
+            );
             return RET_NO_TARGET.into();
         }
         Err(err) => {
-            eprintln!("Unable to find the owner of the target executable {:?}: {}", target, err);
+            eprintln!(
+                "Unable to find the owner of the target executable {:?}: {}",
+                target, err
+            );
             return RET_ENV_ERROR.into();
         }
     };
@@ -178,7 +205,7 @@ fn main() -> ExitCode {
         eprintln!("The the owner of the target executable is not the same as the executable.");
         return RET_OWNER_TARGET.into();
     }
-    
+
     let opts = Opts {
         verbose: args_l.contains(&"--verbose") || args_l.contains(&"-v"),
         dry_run: args_l.contains(&"--dry-run"),
@@ -199,7 +226,8 @@ fn main() -> ExitCode {
     }
 
     let mut command = Command::new(target);
-    command.current_dir(cwd)
+    command
+        .current_dir(cwd)
         .stdin(Stdio::inherit())
         .stderr(Stdio::inherit())
         .stdout(Stdio::inherit())

@@ -1,4 +1,10 @@
-use std::{path::{Path, PathBuf}, os::unix::{prelude::{MetadataExt, PermissionsExt, CommandExt}}, fs::Metadata, process::{Command, ExitCode}, collections::BTreeSet};
+use std::{
+    collections::BTreeSet,
+    fs::Metadata,
+    os::unix::prelude::{CommandExt, MetadataExt, PermissionsExt},
+    path::{Path, PathBuf},
+    process::{Command, ExitCode},
+};
 
 use parking_lot::Mutex;
 
@@ -28,7 +34,11 @@ impl EnvTrait for Nix {
         sibling_target(parent, file_name)
     }
     #[inline]
-    fn prepare_command<'a, A: IntoIterator<Item = &'a str>>(command: &mut Command, args: A, opts: &super::Opts) {
+    fn prepare_command<'a, A: IntoIterator<Item = &'a str>>(
+        command: &mut Command,
+        args: A,
+        opts: &super::Opts,
+    ) {
         prepare_command(command, args, &opts)
     }
     #[inline]
@@ -61,7 +71,11 @@ fn sibling_target(parent: &Path, file_name: &str) -> PathBuf {
     if let Some(a) = file_name.split('.').last() {
         let pos = file_name.len() - a.len();
         if pos != 0 {
-            r.push(format!("{}.run-suid.{}", &file_name[..(pos - 1)], &file_name[pos..]));
+            r.push(format!(
+                "{}.run-suid.{}",
+                &file_name[..(pos - 1)],
+                &file_name[pos..]
+            ));
             return r;
         }
     }
@@ -78,7 +92,11 @@ static PATHS: &[&str] = &[
     "/bin",
 ];
 
-fn prepare_command<'a, A: IntoIterator<Item = &'a str>>(command: &mut Command, args: A, opts: &super::Opts) {
+fn prepare_command<'a, A: IntoIterator<Item = &'a str>>(
+    command: &mut Command,
+    args: A,
+    opts: &super::Opts,
+) {
     command.args(args);
     command.env_clear();
     let cur_path: BTreeSet<_> = match std::env::var("PATH") {
@@ -111,31 +129,12 @@ static CAPTURED_SIGS_CONST: [i32; 20] = {
     use libc::*;
 
     [
-        SIGABRT,
-        SIGALRM,
-        // SIGCHLD,
-        SIGCONT,
-        SIGFPE,
-        SIGHUP,
-        SIGILL,
-        SIGINT,
-        // SIGKILL,
-        SIGPIPE,
-        SIGPOLL,
-        // SIGRTMIN..=SIGRTMAX,
-        SIGQUIT,
-        // SIGSEGV,
-        SIGSTOP,
-        SIGSYS,
-        SIGTSTP,
-        SIGTTIN,
-        SIGTTOU,
-        // SIGTRAP,
-        SIGURG,
-        SIGUSR1,
-        SIGUSR2,
-        SIGXCPU,
-        SIGXFSZ,
+        SIGABRT, SIGALRM, // SIGCHLD,
+        SIGCONT, SIGFPE, SIGHUP, SIGILL, SIGINT, // SIGKILL,
+        SIGPIPE, SIGPOLL, // SIGRTMIN..=SIGRTMAX,
+        SIGQUIT, // SIGSEGV,
+        SIGSTOP, SIGSYS, SIGTSTP, SIGTTIN, SIGTTOU, // SIGTRAP,
+        SIGURG, SIGUSR1, SIGUSR2, SIGXCPU, SIGXFSZ,
     ]
 };
 
@@ -190,7 +189,7 @@ fn wait_for(mut child: Command, opts: super::Opts) -> ExitCode {
                     *exit = Some(ExitCode::from(RET_GENERIC_ERROR));
                     COND.notify_all();
                     return;
-                },
+                }
             };
             let cpid = child.id() as i32;
             {
@@ -225,8 +224,9 @@ fn wait_for(mut child: Command, opts: super::Opts) -> ExitCode {
                     COND.notify_all();
                 }
             }
-        }).unwrap();
-    
+        })
+        .unwrap();
+
     {
         let mut exit = EXIT.lock();
         if let Some(r) = exit.take() {
