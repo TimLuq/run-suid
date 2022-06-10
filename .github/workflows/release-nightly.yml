@@ -1,0 +1,31 @@
+name: Rust
+
+on:
+  push:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  nightly-x86_64-unknown-linux-gnu:
+
+    runs-on: ghcr.io/timluq/osxcross-rs:x86_64-unknown-linux-gnu
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build
+      run: cargo build --release --verbose
+    - name: Run tests
+      run: cargo test --release --verbose
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      with:
+        body: Build representing the current state of the `main` branch.
+        fail_on_unmatched_files: true
+        files: |
+          target/release/run-suid
+        generate_release_notes: false
+        name: nightly-x86_64-unknown-linux-gnu
+        prerelease: true
+        tag_name: nightly-x86_64-unknown-linux-gnu
